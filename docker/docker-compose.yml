@@ -1,0 +1,98 @@
+version: "3.9"
+
+services:
+  chat_app_nginx:
+    image: nginx:1.19-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./services/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./services/nginx/sites_available:/etc/nginx/sites_available
+      - ../services/frontend:/var/www/html/frontend
+      - ../services/chat_api:/var/www/html/chat_api
+      - ../services/users_api:/var/www/html/users_api
+      - ./services/nginx/logs/users_api:/var/log/nginx/users_api
+      - ./services/nginx/logs/chat_api:/var/log/nginx/chat_api
+      - ./services/nginx/logs/frontend:/var/log/nginx/frontend
+    depends_on:
+      - chat_app_users_api
+      - chat_app_chat_api
+      - chat_app_frontend
+      - chat_app_mysql
+
+    # REST users
+  chat_app_users_api:
+    image: nanoninja/php-fpm:latest
+    restart: unless-stopped
+    env_file:
+      - ".env"
+    volumes:
+      - ./services/php.ini:/usr/local/etc/conf.d/php.ini
+      - ../services/users_api:/var/www/html/users_api
+    depends_on:
+      - chat_app_mysql
+
+  # Chat api
+  chat_app_chat_api:
+    image: nanoninja/php-fpm:latest
+    restart: unless-stopped
+    env_file:
+      - ".env"
+    volumes:
+      - ./services/php.ini:/usr/local/etc/conf.d/php.ini
+      - ../services/chat_api:/var/www/html/chat_api
+    depends_on:
+      - chat_app_mysql
+
+  # Chat loc
+  chat_app_frontend:
+    image: nanoninja/php-fpm:latest
+    restart: unless-stopped
+    env_file:
+      - ".env"
+    volumes:
+      - ./services/php.ini:/usr/local/etc/conf.d/php.ini
+      - ../services/frontend:/var/www/html/frontend
+    depends_on:
+      - chat_app_mysql
+
+  myadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_HOST=${MYSQL_HOST}
+    restart: always
+    depends_on:
+      - chat_app_mysql
+
+  chat_app_mysql:
+    image: mysql:${MYSQL_VERSION}
+    container_name: ${MYSQL_HOST}
+    restart: always
+    env_file:
+      - ".env"
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    ports:
+      - "8989:3306"
+    volumes:
+      - "./services/mysql/data:/var/lib/mysql"
+
+  nodejs:
+    build:
+      dockerfile: /nodejs/Dockerfile
+    env_file:
+      - ".env"
+    volumes:
+      - ../services/chat_api:/var/www/html/chat_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - chat_app_mysql
